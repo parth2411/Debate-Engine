@@ -267,7 +267,7 @@ st.markdown("""
 st.markdown("<div class='debate-title'>AI vs. AI Debate Arena</div>", unsafe_allow_html=True)
 
 topic = st.text_input("Debate Motion", placeholder="Enter the debate motion")
-num_rounds = st.slider("Number of Argument Rounds", 1, 5, 3)
+num_rounds = st.slider("Number of Argument Rounds", 1, 5, 1)
 hide_debaters = st.checkbox("Hide Debater Identities (Show as Team 1 & Team 2)", value=False)
 
 st.subheader("Model Selection")
