@@ -46,6 +46,7 @@ json_filename = "debate_history.json"
 
 # Available models for selection
 MODEL_OPTIONS = {
+    "Select a model": None,  # Placeholder option
     "Gemini 2.0 Flash": "gemini-2.0-flash",
     "Gemini 1.5 Pro": "gemini-1.5-pro",
     "Gemini 1.5 flash": "gemini-1.5-flash",
@@ -93,7 +94,7 @@ team2_label = None
 
 def validate_model(model_name, api_prefixes):
     """Validate if the model name is supported by the specified API."""
-    return any(model_name.startswith(prefix) for prefix in api_prefixes)
+    return model_name and any(model_name.startswith(prefix) for prefix in api_prefixes)
 
 def a2a_communicate(agent_card, task, payload):
     """Simulate A2A communication with error handling."""
@@ -196,7 +197,6 @@ def extract_scores(evaluation):
 def upload_to_s3(data, bucket, key):
     """Upload JSON data to S3."""
     try:
-        # Convert data to JSON string and upload
         json_data = json.dumps(data, indent=4)
         s3_client.put_object(
             Bucket=bucket,
@@ -266,31 +266,241 @@ st.markdown("""
 # Streamlit UI
 st.markdown("<div class='debate-title'>AI vs. AI Debate Arena</div>", unsafe_allow_html=True)
 
-topic = st.text_input("Debate Motion", "AI development should prioritize open-source models")
+topic = st.text_input("Debate Motion", placeholder="Enter the debate motion")
 num_rounds = st.slider("Number of Argument Rounds", 1, 5, 3)
 hide_debaters = st.checkbox("Hide Debater Identities (Show as Team 1 & Team 2)", value=False)
 
 st.subheader("Model Selection")
 col1, col2, col3 = st.columns(3)
 with col1:
-    debater_a_model = st.selectbox("Debater A Model", list(MODEL_OPTIONS.keys()), index=0)
-    debater_a_card["model"] = MODEL_OPTIONS[debater_a_model]
+    debater_a_model = st.selectbox("Debater A Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
+    debater_a_card["model"] = MODEL_OPTIONS[debater_a_model] if debater_a_model != "Select a model" else None
 with col2:
-    debater_b_model = st.selectbox("Debater B Model", list(MODEL_OPTIONS.keys()), index=1)
-    debater_b_card["model"] = MODEL_OPTIONS[debater_b_model]
+    debater_b_model = st.selectbox("Debater B Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
+    debater_b_card["model"] = MODEL_OPTIONS[debater_b_model] if debater_b_model != "Select a model" else None
 with col3:
-    judge_model = st.selectbox("Judge Model", list(MODEL_OPTIONS.keys()), index=2)
-    judge_card["model"] = MODEL_OPTIONS[judge_model]
-
-for agent, model in [("Debater A", debater_a_card["model"]), ("Debater B", debater_b_card["model"]), ("Judge", judge_card["model"])]:
-    if not (validate_model(model, GROQ_PREFIXES) or validate_model(model, GEMINI_PREFIXES)):
-        st.error(f"Invalid model selected for {agent}: {model}. Please choose a supported model.")
-        st.stop()
-
-team1_label = "Team 1" if hide_debaters else f"Debater A (Pro, {debater_a_model})"
-team2_label = "Team 2" if hide_debaters else f"Debater B (Con, {debater_b_model})"
+    judge_model = st.selectbox("Judge Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
+    judge_card["model"] = MODEL_OPTIONS[judge_model] if judge_model != "Select a model" else None
 
 start_debate = st.button("Start Debate 🥊")
+
+# Validate inputs before starting debate
+if start_debate:
+    errors = []
+    if not topic.strip():
+        errors.append("Debate motion is required.")
+    if debater_a_card["model"] is None:
+        errors.append("Debater A model must be selected.")
+    if debater_b_card["model"] is None:
+        errors.append("Debater B model must be selected.")
+    if judge_card["model"] is None:
+        errors.append("Judge model must be selected.")
+    
+    for agent, model in [("Debater A", debater_a_card["model"]), ("Debater B", debater_b_card["model"]), ("Judge", judge_card["model"])]:
+        if model and not (validate_model(model, GROQ_PREFIXES) or validate_model(model, GEMINI_PREFIXES)):
+            errors.append(f"Invalid model selected for {agent}: {model}.")
+    
+    if errors:
+        for error in errors:
+            st.error(error)
+    else:
+        team1_label = "Team 1" if hide_debaters else f"Debater A (Pro, {debater_a_model})"
+        team2_label = "Team 2" if hide_debaters else f"Debater B (Con, {debater_b_model})"
+        
+        debate_data = {
+            "debate_id": str(uuid.uuid4()),
+            "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            "topic": topic,
+            "debater_a_model": debater_a_model,
+            "debater_b_model": debater_b_model,
+            "judge_model": judge_model,
+            "rounds": [],
+            "final_result": {}
+        }
+        
+        st.session_state.chat_history = []
+        st.session_state.scores_a = []
+        st.session_state.scores_b = []
+        
+        st.markdown("<div class='debate-stage'>", unsafe_allow_html=True)
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown(f"<div class='debate-a'><strong>{team1_label}</strong></div>", unsafe_allow_html=True)
+            with st.expander("Opening Statement"):
+                opening_a = generate_opening(debater_a_card, topic, "Pro")
+                st.markdown(opening_a, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"<div class='debate-b'><strong>{team2_label}</strong></div>", unsafe_allow_html=True)
+            with st.expander("Opening Statement"):
+                opening_b = generate_opening(debater_b_card, topic, "Con")
+                st.markdown(opening_b, unsafe_allow_html=True)
+        
+        evaluation_opening = evaluate_argument(judge_card, opening_a, opening_b, 0, "Opening Statement")
+        with st.expander("Opening Evaluation"):
+            st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Opening Statements</strong><br>{evaluation_opening}</div>", unsafe_allow_html=True)
+        score_a, score_b, _, _ = extract_scores(evaluation_opening)
+        st.session_state.scores_a.append(score_a)
+        st.session_state.scores_b.append(score_b)
+        st.session_state.chat_history.append({
+            "stage": "Opening",
+            "arg_a": opening_a,
+            "arg_b": opening_b,
+            "evaluation": evaluation_opening
+        })
+        debate_data["rounds"].append({
+            "stage": "Opening",
+            "arg_a": opening_a,
+            "arg_b": opening_b,
+            "evaluation": evaluation_opening,
+            "score_a": score_a,
+            "score_b": score_b
+        })
+        
+        for round_num in range(1, num_rounds + 1):
+            st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+            with col1:
+                st.markdown(f"<div class='debate-a'><strong>{team1_label} (Round {round_num})</strong></div>", unsafe_allow_html=True)
+                with st.expander(f"Argument (Round {round_num})"):
+                    arg_a = generate_argument(debater_a_card, topic, "Pro", round_num)
+                    st.markdown(arg_a, unsafe_allow_html=True)
+            with col2:
+                st.markdown(f"<div class='debate-b'><strong>{team2_label} (Round {round_num})</strong></div>", unsafe_allow_html=True)
+                with st.expander(f"Argument (Round {round_num})"):
+                    arg_b = generate_argument(debater_b_card, topic, "Con", round_num)
+                    st.markdown(arg_b, unsafe_allow_html=True)
+            
+            if round_num == num_rounds:
+                st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+                with col1:
+                    st.markdown(f"<div class='debate-a'><strong>{team1_label} (Cross-Examination)</strong></div>", unsafe_allow_html=True)
+                    with st.expander("Cross-Examination"):
+                        cross_a = cross_examine(debater_a_card, arg_b)
+                        st.markdown(cross_a, unsafe_allow_html=True)
+                with col2:
+                    st.markdown(f"<div class='debate-b'><strong>{team2_label} (Cross-Examination)</strong></div>", unsafe_allow_html=True)
+                    with st.expander("Cross-Examination"):
+                        cross_b = cross_examine(debater_b_card, arg_a)
+                        st.markdown(cross_b, unsafe_allow_html=True)
+            
+            evaluation_round = evaluate_argument(judge_card, arg_a, arg_b, round_num)
+            with st.expander(f"Round {round_num} Evaluation"):
+                st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Round {round_num}</strong><br>{evaluation_round}</div>", unsafe_allow_html=True)
+            score_a, score_b, _, _ = extract_scores(evaluation_round)
+            st.session_state.scores_a.append(score_a)
+            st.session_state.scores_b.append(score_b)
+            st.session_state.chat_history.append({
+                "stage": f"Round {round_num}",
+                "arg_a": arg_a,
+                "arg_b": arg_b,
+                "evaluation": evaluation_round
+            })
+            debate_data["rounds"].append({
+                "stage": f"Round {round_num}",
+                "arg_a": arg_a,
+                "arg_b": arg_b,
+                "evaluation": evaluation_round,
+                "score_a": score_a,
+                "score_b": score_b
+            })
+        
+        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+        with col1:
+            st.markdown(f"<div class='debate-a'><strong>{team1_label}</strong></div>", unsafe_allow_html=True)
+            with st.expander("Closing Statement"):
+                closing_a = generate_closing(debater_a_card, topic, "Pro", st.session_state.chat_history)
+                st.markdown(closing_a, unsafe_allow_html=True)
+        with col2:
+            st.markdown(f"<div class='debate-b'><strong>{team2_label}</strong></div>", unsafe_allow_html=True)
+            with st.expander("Closing Statement"):
+                closing_b = generate_closing(debater_b_card, topic, "Con", st.session_state.chat_history)
+                st.markdown(closing_b, unsafe_allow_html=True)
+        
+        evaluation_closing = evaluate_argument(judge_card, closing_a, closing_b, 0, "Closing Statement")
+        with st.expander("Closing Evaluation"):
+            st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Closing Statements</strong><br>{evaluation_closing}</div>", unsafe_allow_html=True)
+        score_a, score_b, persuasiveness_a, persuasiveness_b = extract_scores(evaluation_closing)
+        st.session_state.scores_a.append(score_a)
+        st.session_state.scores_b.append(score_b)
+        st.session_state.chat_history.append({
+            "stage": "Closing",
+            "arg_a": closing_a,
+            "arg_b": closing_b,
+            "evaluation": evaluation_closing
+        })
+        debate_data["rounds"].append({
+            "stage": "Closing",
+            "arg_a": closing_a,
+            "arg_b": closing_b,
+            "evaluation": evaluation_closing,
+            "score_a": score_a,
+            "score_b": score_b
+        })
+        
+        total_a = sum(st.session_state.scores_a)
+        total_b = sum(st.session_state.scores_b)
+        if total_a > total_b:
+            winner = "Debater A (Pro) wins"
+        elif total_b > total_a:
+            winner = "Debater B (Con) wins"
+        else:
+            if persuasiveness_b > persuasiveness_a:
+                winner = "Debater B (Con) wins (tiebreaker: higher persuasiveness in closing)"
+            elif persuasiveness_a > persuasiveness_b:
+                winner = "Debater A (Pro) wins (tiebreaker: higher persuasiveness in closing)"
+            else:
+                winner = "Debater A (Pro) wins (tiebreaker: evaluation text)" if "Argument B is stronger" not in evaluation_closing else "Debater B (Con) wins (tiebreaker: evaluation text)"
+        debate_data["final_result"] = {
+            "winner": winner,
+            "total_score_a": total_a,
+            "total_score_b": total_b
+        }
+        st.markdown(f"<div class='judge-section'><strong>Final Result: {winner}</strong> with scores {total_a:.2f} vs {total_b:.2f}</div>", unsafe_allow_html=True)
+        
+        # Append debate data to S3
+        existing_data = []
+        try:
+            file_data = download_from_s3(S3_BUCKET, json_filename)
+            if file_data:
+                existing_data = json.loads(file_data.decode('utf-8'))
+                if not isinstance(existing_data, list):
+                    existing_data = [existing_data]
+        except ClientError as e:
+            if e.response['Error']['Code'] != 'NoSuchKey':
+                logger.error(f"Error reading from S3: {str(e)}")
+                st.error(f"Error reading debate history from S3: {str(e)}")
+        
+        existing_data.append(debate_data)
+        
+        if upload_to_s3(existing_data, S3_BUCKET, json_filename):
+            st.success(f"Debate data saved to S3 bucket {S3_BUCKET}")
+        else:
+            st.error("Failed to save debate data to S3. Check logs for details.")
+        
+        chart_data = {
+            "type": "bar",
+            "data": {
+                "labels": ["Opening"] + [f"Round {i}" for i in range(1, num_rounds + 1)] + ["Closing"],
+                "datasets": [
+                    {"label": team1_label, "data": st.session_state.scores_a, "backgroundColor": "#0000FF"},
+                    {"label": team2_label, "data": st.session_state.scores_b, "backgroundColor": "#FF0000"}
+                ]
+            },
+            "options": {
+                "scales": {"y": {"beginAtZero": True, "max": 10}},
+                "plugins": {"title": {"display": True, "text": "Debate Scores by Stage"}}
+            }
+        }
+        chart_html = f"""
+        <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+        <canvas id="scoreChart" width="400" height="200"></canvas>
+        <script>
+            const ctx = document.getElementById('scoreChart').getContext('2d');
+            new Chart(ctx, {json.dumps(chart_data)});
+        </script>
+        """
+        st.components.v1.html(chart_html, height=300)
+        st.markdown("</div>", unsafe_allow_html=True)
 
 # Password-protected download section
 st.subheader("Download Debate History")
@@ -311,204 +521,6 @@ if download_button and password:
             st.error("Failed to download file from S3. Check logs for details.")
     else:
         st.error("Incorrect password.")
-
-if start_debate:
-    debate_data = {
-        "debate_id": str(uuid.uuid4()),
-        "timestamp": datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-        "topic": topic,
-        "debater_a_model": debater_a_model,
-        "debater_b_model": debater_b_model,
-        "judge_model": judge_model,
-        "rounds": [],
-        "final_result": {}
-    }
-    
-    st.session_state.chat_history = []
-    st.session_state.scores_a = []
-    st.session_state.scores_b = []
-    
-    st.markdown("<div class='debate-stage'>", unsafe_allow_html=True)
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown(f"<div class='debate-a'><strong>{team1_label}</strong></div>", unsafe_allow_html=True)
-        with st.expander("Opening Statement"):
-            opening_a = generate_opening(debater_a_card, topic, "Pro")
-            st.markdown(opening_a, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div class='debate-b'><strong>{team2_label}</strong></div>", unsafe_allow_html=True)
-        with st.expander("Opening Statement"):
-            opening_b = generate_opening(debater_b_card, topic, "Con")
-            st.markdown(opening_b, unsafe_allow_html=True)
-    
-    evaluation_opening = evaluate_argument(judge_card, opening_a, opening_b, 0, "Opening Statement")
-    with st.expander("Opening Evaluation"):
-        st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Opening Statements</strong><br>{evaluation_opening}</div>", unsafe_allow_html=True)
-    score_a, score_b, _, _ = extract_scores(evaluation_opening)
-    st.session_state.scores_a.append(score_a)
-    st.session_state.scores_b.append(score_b)
-    st.session_state.chat_history.append({
-        "stage": "Opening",
-        "arg_a": opening_a,
-        "arg_b": opening_b,
-        "evaluation": evaluation_opening
-    })
-    debate_data["rounds"].append({
-        "stage": "Opening",
-        "arg_a": opening_a,
-        "arg_b": opening_b,
-        "evaluation": evaluation_opening,
-        "score_a": score_a,
-        "score_b": score_b
-    })
-    
-    for round_num in range(1, num_rounds + 1):
-        st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-        with col1:
-            st.markdown(f"<div class='debate-a'><strong>{team1_label} (Round {round_num})</strong></div>", unsafe_allow_html=True)
-            with st.expander(f"Argument (Round {round_num})"):
-                arg_a = generate_argument(debater_a_card, topic, "Pro", round_num)
-                st.markdown(arg_a, unsafe_allow_html=True)
-        with col2:
-            st.markdown(f"<div class='debate-b'><strong>{team2_label} (Round {round_num})</strong></div>", unsafe_allow_html=True)
-            with st.expander(f"Argument (Round {round_num})"):
-                arg_b = generate_argument(debater_b_card, topic, "Con", round_num)
-                st.markdown(arg_b, unsafe_allow_html=True)
-        
-        if round_num == num_rounds:
-            st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-            with col1:
-                st.markdown(f"<div class='debate-a'><strong>{team1_label} (Cross-Examination)</strong></div>", unsafe_allow_html=True)
-                with st.expander("Cross-Examination"):
-                    cross_a = cross_examine(debater_a_card, arg_b)
-                    st.markdown(cross_a, unsafe_allow_html=True)
-            with col2:
-                st.markdown(f"<div class='debate-b'><strong>{team2_label} (Cross-Examination)</strong></div>", unsafe_allow_html=True)
-                with st.expander("Cross-Examination"):
-                    cross_b = cross_examine(debater_b_card, arg_a)
-                    st.markdown(cross_b, unsafe_allow_html=True)
-        
-        evaluation_round = evaluate_argument(judge_card, arg_a, arg_b, round_num)
-        with st.expander(f"Round {round_num} Evaluation"):
-            st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Round {round_num}</strong><br>{evaluation_round}</div>", unsafe_allow_html=True)
-        score_a, score_b, _, _ = extract_scores(evaluation_round)
-        st.session_state.scores_a.append(score_a)
-        st.session_state.scores_b.append(score_b)
-        st.session_state.chat_history.append({
-            "stage": f"Round {round_num}",
-            "arg_a": arg_a,
-            "arg_b": arg_b,
-            "evaluation": evaluation_round
-        })
-        debate_data["rounds"].append({
-            "stage": f"Round {round_num}",
-            "arg_a": arg_a,
-            "arg_b": arg_b,
-            "evaluation": evaluation_round,
-            "score_a": score_a,
-            "score_b": score_b
-        })
-    
-    st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
-    with col1:
-        st.markdown(f"<div class='debate-a'><strong>{team1_label}</strong></div>", unsafe_allow_html=True)
-        with st.expander("Closing Statement"):
-            closing_a = generate_closing(debater_a_card, topic, "Pro", st.session_state.chat_history)
-            st.markdown(closing_a, unsafe_allow_html=True)
-    with col2:
-        st.markdown(f"<div class='debate-b'><strong>{team2_label}</strong></div>", unsafe_allow_html=True)
-        with st.expander("Closing Statement"):
-            closing_b = generate_closing(debater_b_card, topic, "Con", st.session_state.chat_history)
-            st.markdown(closing_b, unsafe_allow_html=True)
-    
-    evaluation_closing = evaluate_argument(judge_card, closing_a, closing_b, 0, "Closing Statement")
-    with st.expander("Closing Evaluation"):
-        st.markdown(f"<div class='judge-section'><strong>⚖️ Judge Evaluation: Closing Statements</strong><br>{evaluation_closing}</div>", unsafe_allow_html=True)
-    score_a, score_b, persuasiveness_a, persuasiveness_b = extract_scores(evaluation_closing)
-    st.session_state.scores_a.append(score_a)
-    st.session_state.scores_b.append(score_b)
-    st.session_state.chat_history.append({
-        "stage": "Closing",
-        "arg_a": closing_a,
-        "arg_b": closing_b,
-        "evaluation": evaluation_closing
-    })
-    debate_data["rounds"].append({
-        "stage": "Closing",
-        "arg_a": closing_a,
-        "arg_b": closing_b,
-        "evaluation": evaluation_closing,
-        "score_a": score_a,
-        "score_b": score_b
-    })
-    
-    total_a = sum(st.session_state.scores_a)
-    total_b = sum(st.session_state.scores_b)
-    if total_a > total_b:
-        winner = "Debater A (Pro) wins"
-    elif total_b > total_a:
-        winner = "Debater B (Con) wins"
-    else:
-        if persuasiveness_b > persuasiveness_a:
-            winner = "Debater B (Con) wins (tiebreaker: higher persuasiveness in closing)"
-        elif persuasiveness_a > persuasiveness_b:
-            winner = "Debater A (Pro) wins (tiebreaker: higher persuasiveness in closing)"
-        else:
-            winner = "Debater A (Pro) wins (tiebreaker: evaluation text)" if "Argument B is stronger" not in evaluation_closing else "Debater B (Con) wins (tiebreaker: evaluation text)"
-    debate_data["final_result"] = {
-        "winner": winner,
-        "total_score_a": total_a,
-        "total_score_b": total_b
-    }
-    st.markdown(f"<div class='judge-section'><strong>Final Result: {winner}</strong> with scores {total_a:.2f} vs {total_b:.2f}</div>", unsafe_allow_html=True)
-    
-    # Append debate data to S3
-    existing_data = []
-    try:
-        # Try to download existing file from S3
-        file_data = download_from_s3(S3_BUCKET, json_filename)
-        if file_data:
-            existing_data = json.loads(file_data.decode('utf-8'))
-            if not isinstance(existing_data, list):
-                existing_data = [existing_data]
-    except ClientError as e:
-        if e.response['Error']['Code'] != 'NoSuchKey':
-            logger.error(f"Error reading from S3: {str(e)}")
-            st.error(f"Error reading debate history from S3: {str(e)}")
-    
-    existing_data.append(debate_data)
-    
-    # Upload updated data to S3
-    if upload_to_s3(existing_data, S3_BUCKET, json_filename):
-        st.success(f"Debate data saved to S3 bucket {S3_BUCKET}")
-    else:
-        st.error("Failed to save debate data to S3. Check logs for details.")
-    
-    chart_data = {
-        "type": "bar",
-        "data": {
-            "labels": ["Opening"] + [f"Round {i}" for i in range(1, num_rounds + 1)] + ["Closing"],
-            "datasets": [
-                {"label": team1_label, "data": st.session_state.scores_a, "backgroundColor": "#0000FF"},
-                {"label": team2_label, "data": st.session_state.scores_b, "backgroundColor": "#FF0000"}
-            ]
-        },
-        "options": {
-            "scales": {"y": {"beginAtZero": True, "max": 10}},
-            "plugins": {"title": {"display": True, "text": "Debate Scores by Stage"}}
-        }
-    }
-    chart_html = f"""
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <canvas id="scoreChart" width="400" height="200"></canvas>
-    <script>
-        const ctx = document.getElementById('scoreChart').getContext('2d');
-        new Chart(ctx, {json.dumps(chart_data)});
-    </script>
-    """
-    st.components.v1.html(chart_html, height=300)
-    st.markdown("</div>", unsafe_allow_html=True)
 
 if "chat_history" in st.session_state:
     with st.expander("Debate History"):
