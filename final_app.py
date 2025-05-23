@@ -274,13 +274,13 @@ st.subheader("Model Selection")
 col1, col2, col3 = st.columns(3)
 with col1:
     debater_a_model = st.selectbox("Debater A Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
-    debater_a_card["model"] = MODEL_OPTIONS[debater_a_model] if debater_a_model != "Select a model" else None
+    debater_a_card["model"] = MODEL_OPTIONS[debater_a_model] if debater_a_model and debater_a_model != "Select a model" else None
 with col2:
     debater_b_model = st.selectbox("Debater B Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
-    debater_b_card["model"] = MODEL_OPTIONS[debater_b_model] if debater_b_model != "Select a model" else None
+    debater_b_card["model"] = MODEL_OPTIONS[debater_b_model] if debater_b_model and debater_b_model != "Select a model" else None
 with col3:
     judge_model = st.selectbox("Judge Model", list(MODEL_OPTIONS.keys()), index=None, placeholder="Select a model")
-    judge_card["model"] = MODEL_OPTIONS[judge_model] if judge_model != "Select a model" else None
+    judge_card["model"] = MODEL_OPTIONS[judge_model] if judge_model and judge_model != "Select a model" else None
 
 start_debate = st.button("Start Debate 🥊")
 
