@@ -35,7 +35,6 @@ The app stores debate history on **AWS S3**, supports **dynamic model selection*
 
 ````
 
----
 
 ## ⚙️ Setup Instructions
 
@@ -97,7 +96,6 @@ streamlit run app.py
 Then open your browser at:
 👉 [http://localhost:8501](http://localhost:8501)
 
----
 
 ## 🧩 How It Works
 
@@ -120,7 +118,6 @@ Then open your browser at:
    * Persuasiveness (20%)
 5. **Final winner is declared** — Results are uploaded to S3 and visualized.
 
----
 
 ## 📊 Example Output
 
@@ -136,7 +133,6 @@ Explanation: Argument A is clearer and more coherent overall.
 
 * Interactive bar chart showing Debater A vs. Debater B scores for each debate stage.
 
----
 
 ## ☁️ AWS S3 Integration
 
@@ -160,7 +156,6 @@ You can also:
 | `extract_scores()`                      | Parses structured judge feedback into numeric scores |
 | `upload_to_s3()` / `download_from_s3()` | Handles debate data persistence                      |
 
----
 
 ## 🧱 Project Structure
 
@@ -173,7 +168,6 @@ ai-debate-arena/
 └── README.md              # Documentation
 ```
 
----
 
 ## 🔒 Security Notes
 
@@ -181,7 +175,6 @@ ai-debate-arena/
 * Use IAM policies to restrict S3 bucket access
 * Change `DOWNLOAD_PASSWORD` periodically
 
----
 
 ## 🤖 Supported Models
 
@@ -202,7 +195,6 @@ ai-debate-arena/
 * gemini-2.5-pro-preview-05-06
 * gemini-2.0-flash-lite
 
----
 
 ## 💡 Future Enhancements
 
@@ -211,7 +203,6 @@ ai-debate-arena/
 * 🧮 Multi-judge evaluation and average scoring
 * ⚙️ Enable user-uploaded models via local endpoints
 
----
 
 ## 🧑‍💻 Author
 
@@ -219,7 +210,6 @@ ai-debate-arena/
 Senior AI/ML Engineer
 📫 [LinkedIn](https://www.linkedin.com/in/parthbhalodiya) • [GitHub](https://github.com/your-username)
 
----
 
 ## 📜 License
 
