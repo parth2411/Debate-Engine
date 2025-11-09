@@ -5,7 +5,6 @@ A third AI model acts as the **judge**, evaluating clarity, coherence, and persu
 
 The app stores debate history on **AWS S3**, supports **dynamic model selection**, and visualizes **round-by-round performance** with interactive charts.
 
----
 
 ## 🚀 Features
 
@@ -17,7 +16,6 @@ The app stores debate history on **AWS S3**, supports **dynamic model selection*
 - 📊 **Performance Visualization** — Bar chart summary of debate scores across rounds  
 - 🪶 **Error Handling & Logging** — Robust logging for API calls and S3 uploads  
 
----
 
 ## 🧠 System Architecture
 
@@ -230,7 +228,3 @@ Feel free to use, modify, and share it responsibly.
 
 ```
 
----
-
-Would you like me to also provide matching **`requirements.txt`** and a ready-to-commit **`.env.example`** file in Markdown format right after this?
-```
