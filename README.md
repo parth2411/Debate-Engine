@@ -1,8 +1,3 @@
-
-
----
-
-```markdown
 # 🥊 AI vs. AI Debate Arena
 
 **AI vs. AI Debate Arena** is a Streamlit-based application that allows multiple large language models (LLMs) — such as **Groq**, **Google Gemini**, and others — to debate against each other on any topic you choose.  
