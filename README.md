@@ -208,7 +208,7 @@ ai-debate-arena/
 
 **Parth Bhalodiya**
 Senior AI/ML Engineer
-📫 [LinkedIn](https://www.linkedin.com/in/parthbhalodiya) • [GitHub](https://github.com/your-username)
+📫 [LinkedIn](https://www.linkedin.com/in/parth-bhalodiya-555011128) • [GitHub](https://github.com/parth2411)
 
 
 ## 📜 License
@@ -216,5 +216,4 @@ Senior AI/ML Engineer
 This project is licensed under the **MIT License**.
 Feel free to use, modify, and share it responsibly.
 
-```
 
